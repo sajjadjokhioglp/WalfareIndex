@@ -1,8 +1,5 @@
 import os
-import re
-import random
-import time
-import difflib
+import base64
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -10,18 +7,11 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 # --- Page Configuration ---
-st.set_page_config(page_title="Pakistan District Socioeconomic Dashboard", page_icon="🇵🇰", layout="wide")
+st.set_page_config(page_title="Welfare Index", page_icon="🇵🇰", layout="wide")
 
 # --- Theme: this dashboard is locked to Dark Mode only ---
 CHART_FONT_COLOR = "#e2e8f0"
 CHART_GRID_COLOR = "rgba(255,255,255,0.08)"
-
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-if "awaiting_response" not in st.session_state:
-    st.session_state.awaiting_response = False
-if "pending_prompt" not in st.session_state:
-    st.session_state.pending_prompt = None
 
 # --- Enhanced Dark-Mode Design System ---
 st.markdown("""
@@ -102,9 +92,22 @@ st.markdown("""
     }
 
     /* --- Tabs: two-row grid, pill-style active state --- */
-    .stTabs [data-baseweb="tab-list"] { gap: 8px !important; flex-wrap: wrap !important; overflow-x: visible !important; row-gap: 10px; border-bottom: none !important; }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px !important; flex-wrap: nowrap !important;
+        overflow-x: auto !important; overflow-y: hidden !important;
+        border-bottom: none !important; padding-bottom: 14px;
+        scrollbar-width: thin; scrollbar-color: rgba(6,182,212,0.7) rgba(255,255,255,0.08);
+    }
+    .stTabs [data-baseweb="tab-list"]::-webkit-scrollbar { height: 8px; }
+    .stTabs [data-baseweb="tab-list"]::-webkit-scrollbar-track {
+        background: rgba(255,255,255,0.08) !important; border-radius: 10px; margin: 0 4px;
+    }
+    .stTabs [data-baseweb="tab-list"]::-webkit-scrollbar-thumb {
+        background: rgba(6,182,212,0.7) !important; border-radius: 10px; border: none;
+    }
+    .stTabs [data-baseweb="tab-list"]::-webkit-scrollbar-thumb:hover { background: rgba(6,182,212,1) !important; }
     .stTabs [data-baseweb="tab-border"] { display: none !important; }
-    .stTabs [data-baseweb="tab-list"] button[data-baseweb="tab"] { flex: 0 0 calc(20% - 7px) !important; box-sizing: border-box !important; justify-content: center !important; white-space: normal !important; text-align: center !important; }
+    .stTabs [data-baseweb="tab-list"] button[data-baseweb="tab"] { flex: 0 0 auto !important; white-space: nowrap !important; }
     .stTabs [data-baseweb="tab"] {
         padding: 12px 10px; border-radius: 10px; background: var(--bg-surface);
         border: 1px solid var(--border-subtle); color: var(--text-secondary);
@@ -116,7 +119,12 @@ st.markdown("""
         color: var(--accent-bright) !important; border: 1px solid var(--accent-glow) !important;
         box-shadow: 0 0 16px rgba(6,182,212,0.15);
     }
-    button[aria-label*="scroll" i] { display: none !important; }
+    button[aria-label*="scroll" i] {
+        background: var(--bg-surface-2) !important; border: 1px solid var(--border-subtle) !important;
+        border-radius: 8px !important; opacity: 1 !important; box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important;
+    }
+    button[aria-label*="scroll" i] svg { fill: #22d3ee !important; }
+    button[aria-label*="scroll" i]:hover { border-color: var(--accent) !important; background: var(--bg-surface) !important; }
 
     /* --- Insights box: glassmorphism --- */
     .insights-box {
@@ -195,46 +203,6 @@ st.markdown("""
     /* --- Selectbox current value text --- */
     div[data-testid="stSelectbox"] label p { color: #e2e8f0 !important; }
 
-    /* --- AI Chat Bot Tab Styling --- */
-    [data-testid="stChatInput"] {
-        background: var(--bg-surface-2) !important;
-        border: 1px solid var(--border-subtle) !important;
-        border-radius: 12px !important;
-    }
-    [data-testid="stChatInput"] > div, [data-testid="stChatInput"] div {
-        background: transparent !important;
-    }
-    [data-testid="stChatInput"] textarea, [data-testid="stChatInput"] textarea * {
-        background: transparent !important; color: #f1f5f9 !important; -webkit-text-fill-color: #f1f5f9 !important;
-    }
-    [data-testid="stChatInput"] textarea::placeholder { color: #7c8aa3 !important; opacity: 1 !important; }
-    [data-testid="stChatInput"]:focus-within { border-color: var(--accent) !important; box-shadow: 0 0 12px rgba(6,182,212,0.25) !important; }
-    [data-testid="stChatInput"] button {
-        background: var(--accent) !important; border-radius: 8px !important;
-    }
-    [data-testid="stChatInput"] button:hover { background: var(--accent-bright) !important; }
-    [data-testid="stChatInput"] button svg { fill: #0a0f1c !important; }
-    .chatbot-card {
-        background: linear-gradient(135deg, #0b1220 0%, #1b2740 100%);
-        border: 1px solid var(--border-subtle);
-        border-radius: 16px; padding: 20px 26px; margin-bottom: 16px;
-        display: flex; align-items: center; gap: 16px;
-        box-shadow: 0 8px 28px rgba(6,182,212,0.08), 0 4px 14px rgba(0,0,0,0.3);
-    }
-    .chatbot-avatar {
-        width: 52px; height: 52px; border-radius: 50%;
-        background: linear-gradient(135deg, #06b6d4, #0891b2);
-        display: flex; align-items: center; justify-content: center;
-        font-size: 26px; flex-shrink: 0; box-shadow: 0 4px 14px rgba(6,182,212,0.5);
-    }
-    .chatbot-title { font-size: 19px; font-weight: 700; color: #ffffff; margin-bottom: 3px; }
-    .chatbot-status { font-size: 12.5px; color: #67e8f9; display: flex; align-items: center; gap: 6px; font-weight: 500; }
-    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #06b6d4; display: inline-block; box-shadow: 0 0 8px #06b6d4; animation: pulse-dot 1.8s infinite; }
-    @keyframes pulse-dot { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
-    .capability-pills { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 18px 0; }
-    .pill { background: rgba(6,182,212,0.14); color: var(--accent-bright); font-size: 12px; font-weight: 600; padding: 6px 13px; border-radius: 999px; border: 1px solid rgba(6,182,212,0.3); transition: all 0.2s ease; }
-    .pill:hover { background: rgba(6,182,212,0.24); }
-    div[data-testid="stChatMessage"] { background: var(--bg-surface) !important; border: 1px solid var(--border-subtle); border-radius: 14px; margin-bottom: 8px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -313,7 +281,6 @@ KITCHEN_COLS = ['Kitchen : Separate', 'Kitchen : None']
 WASHROOM_COLS = ['Washroom : Separate', 'Washroom : None']
 LAND_TENURE_COLS = ['Govt', 'Non - Govt']
 
-ENTITY_COLUMNS = ['District', 'Province', 'Division', 'Gallup Region', 'Region Type']
 
 # Consistent, vivid palette for Province-colored charts across every tab (dark-mode tuned)
 PROVINCE_COLORS = px.colors.qualitative.D3
@@ -401,6 +368,28 @@ def col_sum_df(f_df, cols, strip_prefixes=('Religion.', 'Nationality.', 'Marital
 # ==========================================
 # SIDEBAR FILTERS
 # ==========================================
+LOGO_FILE = "gallup_logo.jpg"
+
+
+def find_logo_file():
+    import glob
+    search_dirs = [os.getcwd(), SCRIPT_DIR]
+    for d in search_dirs:
+        exact = os.path.join(d, LOGO_FILE)
+        if os.path.exists(exact):
+            return exact
+    for d in search_dirs:
+        for pattern in ("*logo*.jpg", "*logo*.jpeg", "*logo*.png", "*gallup*.jpg", "*gallup*.png"):
+            matches = glob.glob(os.path.join(d, pattern))
+            if matches:
+                return matches[0]
+    return None
+
+
+_logo_path = find_logo_file()
+if _logo_path is None:
+    st.sidebar.caption("ℹ️ Logo not found — place `gallup_logo.jpg` next to district_dashboard.py to show it.")
+
 st.sidebar.markdown("## 📋 Dashboard Filters")
 
 st.sidebar.markdown('<div class="sidebar-label">Province</div>', unsafe_allow_html=True)
@@ -493,8 +482,26 @@ filtered_df = df[
 # ==========================================
 # MAIN DASHBOARD LAYOUT
 # ==========================================
-st.markdown(f"<h1 style='font-weight: 700; color: #f1f5f9;'>🇵🇰 Pakistan District Socioeconomic Dashboard</h1>", unsafe_allow_html=True)
-st.markdown(f"<p style='font-size: 16px; margin-top: -10px; margin-bottom: 30px;'><span style='color: #e2e8f0; opacity: 0.65;'>District-level census & socioeconomic indicators (2023)</span> <span style='background:rgba(6,182,212,0.18); padding: 4px 10px; border-radius: 12px; color: #22d3ee; font-weight: 600; margin-left: 10px;'>{filtered_df['District'].nunique()} districts selected</span></p>", unsafe_allow_html=True)
+_logo_html = ""
+if _logo_path:
+    with open(_logo_path, 'rb') as _f:
+        _logo_b64 = base64.b64encode(_f.read()).decode()
+    _logo_html = (
+        '<div style="background:#ffffff; padding:8px 10px; border-radius:14px; '
+        'box-shadow:0 6px 20px rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.15); '
+        'flex-shrink:0; display:flex; align-items:center;">'
+        f'<img src="data:image/jpeg;base64,{_logo_b64}" style="height:58px; display:block; border-radius:4px;">'
+        '</div>'
+    )
+
+_header_html = (
+    '<div style="display:flex; align-items:center; gap:20px; margin-bottom:4px;">'
+    + _logo_html +
+    '<div><h1 style="font-weight:700; color:#f1f5f9; margin:0; line-height:1.2; font-size:2.2rem;">Welfare Index</h1></div>'
+    '</div>'
+)
+st.markdown(_header_html, unsafe_allow_html=True)
+st.markdown(f"<p style='font-size: 16px; margin-top: -6px; margin-bottom: 30px;'><span style='color: #e2e8f0; opacity: 0.65;'>District-level census & socioeconomic indicators (2023)</span> <span style='background:rgba(6,182,212,0.18); padding: 4px 10px; border-radius: 12px; color: #22d3ee; font-weight: 600; margin-left: 10px;'>{filtered_df['District'].nunique()} districts selected</span></p>", unsafe_allow_html=True)
 
 if filtered_df.empty:
     st.warning("No data available for the selected filters.")
@@ -657,10 +664,10 @@ def build_district_summary(f_df):
     return pd.DataFrame(rows)
 
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
     "📊 Overview", "👥 Demographics", "🎓 Education", "🏠 Housing & Amenities",
     "🏗️ Buildings & Land", "🌍 Diversity & Inclusion", "📈 Population Growth",
-    "🏆 District Rankings", "🔍 Raw Data", "🤖 AI Chat Bot"
+    "🏆 District Rankings", "🔍 Raw Data"
 ])
 
 # ==========================================
@@ -974,358 +981,3 @@ with tab9:
     render_dark_table(filtered_df, max_height=550)
     csv = filtered_df.to_csv(index=False).encode('utf-8')
     st.download_button(label="📥 Download CSV", data=csv, file_name='district_data.csv', mime='text/csv', use_container_width=True)
-
-
-# ==========================================
-# SUPER INTELLIGENT CHATBOT ENGINE
-# ==========================================
-def get_formatted_list(f_df, column_name, limit=25):
-    counts = f_df.groupby(column_name)['Total Population 2023'].sum().sort_values(ascending=False) if column_name in ('District', 'Province', 'Division', 'Gallup Region') else f_df[column_name].value_counts()
-    total = len(counts)
-    text = f"📋 **Top {limit} {column_name}s by population** (out of {total} total):\n\n"
-    for i, (name, val) in enumerate(counts.head(limit).items(), 1):
-        text += f"{i}. **{name}** ({val:,.0f})\n"
-    if total > limit:
-        text += f"\n_*(Showing top {limit}. Download CSV in the Raw Data tab for the full list!)*_"
-    return text
-
-
-def get_regional_comparison(f_df):
-    text = "📈 **Regional Comparison** _(note: this is 2023 census snapshot data, not a time series, so this compares regions instead of tracking change over months/years)_:\n\n"
-    prov_pop = f_df.groupby('Province')['Total Population 2023'].sum().sort_values(ascending=False)
-    if not prov_pop.empty:
-        text += f"• **Most populous province:** {prov_pop.index[0]} ({prov_pop.iloc[0]:,.0f} people)\n\n"
-    urban_lit = rate_from_sums(f_df[f_df['Region Type'] == 'Urban'], 'Sum of Literacy Rate', '10 + Population')
-    rural_lit = rate_from_sums(f_df[f_df['Region Type'] == 'Rural'], 'Sum of Literacy Rate', '10 + Population')
-    if not (np.isnan(urban_lit) or np.isnan(rural_lit)):
-        gap = urban_lit - rural_lit
-        text += f"• **Urban vs Rural literacy gap:** Urban areas average **{urban_lit:.1f}%** literacy vs **{rural_lit:.1f}%** rural — a gap of **{abs(gap):.1f} points**.\n\n"
-    dist_lit = f_df.groupby('District').apply(lambda x: rate_from_sums(x, 'Sum of Literacy Rate', '10 + Population')).dropna()
-    if not dist_lit.empty:
-        text += f"• **Highest district literacy:** {dist_lit.idxmax()} ({dist_lit.max():.1f}%)\n• **Lowest district literacy:** {dist_lit.idxmin()} ({dist_lit.min():.1f}%)\n"
-    return text
-
-
-def find_entity_matches(q, f_df, columns=ENTITY_COLUMNS, max_matches=3):
-    found = []
-    for col in columns:
-        if col not in f_df.columns: continue
-        for v in f_df[col].dropna().unique():
-            vs = str(v).lower()
-            if len(vs) >= 3 and vs in q:
-                found.append((col, v))
-    found = list(dict.fromkeys(found))  # de-dupe while preserving column-priority order
-    found.sort(key=lambda x: (-len(str(x[1])), columns.index(x[0])))
-    return found[:max_matches]
-
-
-def fuzzy_entity_match(q, f_df, columns=ENTITY_COLUMNS, cutoff=0.75):
-    best, best_score = None, 0
-    for col in columns:
-        if col not in f_df.columns: continue
-        for v in f_df[col].dropna().unique():
-            score = difflib.SequenceMatcher(None, str(v).lower(), q).ratio()
-            if score > best_score:
-                best_score, best = score, (col, v)
-    return best if best_score >= cutoff else None
-
-
-def get_entity_profile(f_df, column, value):
-    sub = f_df[f_df[column] == value]
-    if sub.empty: return f"I couldn't find any data for **{value}**."
-    pop, hh = sub['Total Population 2023'].sum(), sub['Households'].sum()
-    male, female = sub['Male Population'].sum(), sub['Female Population'].sum()
-    lit = rate_from_sums(sub, 'Sum of Literacy Rate', '10 + Population')
-    sa = rate_from_sums(sub, 'School Attendance', 'School Attendance.5 - 14  Population')
-    ep = rate_from_sums(sub, 'Enrolment Primary', 'Enrolment Primary.5 - 9  Population')
-    hh_size = weighted_avg(sub, 'Average of avg_hh_size', 'Households')
-
-    icon = {'District': '📍', 'Province': '🗺️', 'Division': '🧭', 'Gallup Region': '🌐', 'Region Type': '🏙️'}.get(column, '📌')
-    text = f"{icon} **{value}**\n\n"
-    if column == 'District':
-        text += f"• Province: **{sub['Province'].iloc[0]}** | Division: **{sub['Division'].iloc[0]}**\n"
-        text += f"• Coverage: **{', '.join(sorted(sub['Region Type'].unique()))}**\n"
-    elif column == 'Province':
-        text += f"• Districts covered: **{sub['District'].nunique()}**\n"
-    elif column in ('Division', 'Gallup Region'):
-        text += f"• Districts covered: **{sub['District'].nunique()}** across **{sub['Province'].nunique()}** province(s)\n"
-    text += f"• Population: **{pop:,.0f}** ({male:,.0f} male, {female:,.0f} female)\n"
-    text += f"• Households: **{hh:,.0f}**"
-    if not np.isnan(hh_size): text += f" (avg size **{hh_size:.1f}**)"
-    text += "\n"
-    if not np.isnan(lit): text += f"• Literacy Rate: **{lit:.1f}%**\n"
-    if not np.isnan(sa): text += f"• School Attendance: **{sa:.1f}%**\n"
-    if not np.isnan(ep): text += f"• Primary Enrolment: **{ep:.1f}%**\n"
-    if column in ('Province', 'Division', 'Gallup Region'):
-        top_dist = sub.groupby('District')['Total Population 2023'].sum().sort_values(ascending=False)
-        if not top_dist.empty: text += f"• Most populous district: **{top_dist.index[0]}** ({top_dist.iloc[0]:,.0f})\n"
-    return text
-
-
-FULL_COMPARISON_TRIGGERS = r'\b(all possible|all methods|all ways|every way|everything|all metrics|full comparison|complete comparison|in detail|all aspects|every metric|all variables)\b'
-
-# (display name, kind, numerator/plain col, denominator col or None, format string, higher_is_better or None for neutral)
-# kind: 'sum' = simple total | 'rate' = numerator/denominator*100 | 'weighted' = weighted average | 'weighted_pct' = weighted average*100
-COMPARISON_METRICS = [
-    ("Population", 'sum', 'Total Population 2023', None, "{:,.0f}", True),
-    ("Households", 'sum', 'Households', None, "{:,.0f}", True),
-    ("Literacy Rate %", 'rate', 'Sum of Literacy Rate', '10 + Population', "{:.1f}%", True),
-    ("School Attendance %", 'rate', 'School Attendance', 'School Attendance.5 - 14  Population', "{:.1f}%", True),
-    ("Enrolment Primary %", 'rate', 'Enrolment Primary', 'Enrolment Primary.5 - 9  Population', "{:.1f}%", True),
-    ("Population Growth %", 'weighted_pct', 'AAPGR', 'Total Population 2023', "{:.2f}%", True),
-    ("Avg Household Size", 'weighted', 'Average of avg_hh_size', 'Households', "{:.1f}", None),
-    ("Sex Ratio", 'weighted', 'Average of sex_ratio', 'Total Population 2023', "{:.1f}", None),
-]
-
-
-def _compute_comparison_metric(sub, kind, col, den_col):
-    if kind == 'sum':
-        return sub[col].sum()
-    if kind == 'rate':
-        return rate_from_sums(sub, col, den_col)
-    if kind == 'weighted':
-        return weighted_avg(sub, col, den_col)
-    if kind == 'weighted_pct':
-        v = weighted_avg(sub, col, den_col)
-        return v * 100 if not pd.isna(v) else v
-    return np.nan
-
-
-def get_full_comparison(f_df, column, val1, val2):
-    sub1, sub2 = f_df[f_df[column] == val1], f_df[f_df[column] == val2]
-    text = f"⚖️🔬 **Full Comparison: {val1} vs {val2}**\n\n"
-    wins1 = wins2 = scored = 0
-    for name, kind, col, den_col, fmt, higher_better in COMPARISON_METRICS:
-        m1 = _compute_comparison_metric(sub1, kind, col, den_col)
-        m2 = _compute_comparison_metric(sub2, kind, col, den_col)
-        if pd.isna(m1) or pd.isna(m2):
-            continue
-        v1_str, v2_str = fmt.format(m1), fmt.format(m2)
-        if higher_better is None:
-            text += f"• **{name}** — {val1}: {v1_str} | {val2}: {v2_str}\n"
-        else:
-            scored += 1
-            if m1 > m2:
-                wins1 += 1
-                text += f"• **{name}** — {val1}: **{v1_str}** 🏆 | {val2}: {v2_str}\n"
-            elif m2 > m1:
-                wins2 += 1
-                text += f"• **{name}** — {val1}: {v1_str} | {val2}: **{v2_str}** 🏆\n"
-            else:
-                text += f"• **{name}** — {val1}: {v1_str} | {val2}: {v2_str} (tie)\n"
-
-    text += "\n"
-    if wins1 > wins2:
-        text += f"🏆 **Overall, {val1} leads** in **{wins1}** out of **{scored}** measured categories (vs {wins2} for {val2})."
-    elif wins2 > wins1:
-        text += f"🏆 **Overall, {val2} leads** in **{wins2}** out of **{scored}** measured categories (vs {wins1} for {val1})."
-    else:
-        text += f"🤝 **It's an overall tie** — both lead in {wins1} categories each."
-    return text
-
-
-def get_comparison(f_df, column, val1, val2, q):
-    if re.search(FULL_COMPARISON_TRIGGERS, q):
-        return get_full_comparison(f_df, column, val1, val2)
-    sub1, sub2 = f_df[f_df[column] == val1], f_df[f_df[column] == val2]
-    if 'literacy' in q:
-        m1, m2, label = rate_from_sums(sub1, 'Sum of Literacy Rate', '10 + Population'), rate_from_sums(sub2, 'Sum of Literacy Rate', '10 + Population'), "literacy rate"
-        fmt = lambda v: f"{v:.1f}%"
-    elif 'school' in q or 'attendance' in q:
-        m1, m2, label = rate_from_sums(sub1, 'School Attendance', 'School Attendance.5 - 14  Population'), rate_from_sums(sub2, 'School Attendance', 'School Attendance.5 - 14  Population'), "school attendance"
-        fmt = lambda v: f"{v:.1f}%"
-    elif 'household' in q or 'hh' in q:
-        m1, m2, label = sub1['Households'].sum(), sub2['Households'].sum(), "households"
-        fmt = lambda v: f"{v:,.0f}"
-    else:
-        m1, m2, label = sub1['Total Population 2023'].sum(), sub2['Total Population 2023'].sum(), "population"
-        fmt = lambda v: f"{v:,.0f}"
-    text = f"⚖️ **Comparing {val1} vs {val2} ({label}):**\n\n• **{val1}**: {fmt(m1)}\n• **{val2}**: {fmt(m2)}\n\n"
-    if m1 > m2: text += f"🏆 **{val1}** leads in {label}."
-    elif m2 > m1: text += f"🏆 **{val2}** leads in {label}."
-    else: text += "🤝 It's a tie!"
-    text += "\n\n_💡 Tip: ask to \"compare X vs Y in all possible methods\" for a full multi-metric breakdown._"
-    return text
-
-
-def answer_query(query: str, f_df: pd.DataFrame) -> str:
-    q = query.lower().strip()
-
-    if re.search(r'\b(bye|goodbye|good night|see (you|ya)|take care|gtg|catch you later|khuda hafiz|allah hafiz)\b', q):
-        return random.choice(["Goodbye! 👋 Come back anytime you want to explore the district data.", "See you soon! 🙌 Feel free to ask more questions later.", "Take care! 😊 I'll be here whenever you need more insights."])
-    if re.search(r'\b(thank(s| you)?|thankyou|shukriya|appreciate it|thnx)\b', q):
-        return random.choice(["You're welcome! 😊 Happy to help with anything else.", "Anytime! 🙌 Let me know if you'd like to explore more of the data.", "Glad I could help! 💚 Ask away if you need anything else."])
-    if re.search(r'\b(who are you|what are you|your name|what is your name)\b', q):
-        return "🤖 I'm **Data Bot**, your AI assistant for this dashboard. I can look up any province, division, or district, compare regions, and summarize the currently filtered census data."
-    if re.search(r'\bhow are you\b', q):
-        return random.choice(["I'm doing great and ready to explore some district data! 📊 What would you like to know?", "All systems running smoothly! 🤖 How can I help you today?"])
-    if re.search(r'\b(good bot|nice bot|great job|well done|awesome|you\'?re smart|clever bot)\b', q):
-        return random.choice(["Thank you! 😊 I try my best to make sense of the data for you.", "Appreciate that! 🙌 Let me know what else you'd like to explore."])
-    if re.search(r'\b(help|what can you do|options|commands|capabilities)\b', q):
-        return ("🤖 **Here's everything I can do:**\n\n"
-                "• 📋 **List** provinces, divisions, or districts by population\n"
-                "• 🏆 Find **top/highest/lowest** districts by literacy, population, or school attendance\n"
-                "• 🔢 **Count** districts, provinces, population, or households\n"
-                "• 📈 Give a **regional comparison** (urban vs rural, top provinces, etc.)\n"
-                "• 📐 Calculate **averages** (e.g. \"average household size\")\n"
-                "• 🔍 **Look up** any specific district, province, division, or Gallup region by name\n"
-                "• ⚖️ **Compare** two districts or provinces — e.g. \"compare Lahore vs Karachi literacy\"\n"
-                "• 📊 Give a full **summary** of the current filtered data\n\n"
-                "Just type naturally, greet me, or say thanks — I'll understand! 😊")
-    if re.search(r'\b(hi+|hello+|hey+|yo|greetings|good morning|good afternoon|good evening|assalam|salam)\b', q):
-        return random.choice(["Hello! 👋 I'm Data Bot. Ask me about any district, province, or comparison — or type \"help\" to see everything I can do!", "Hey there! 😊 I'm ready to dig into the census data — what would you like to know?", "Hi! 👋 Try asking about a district or province, or type \"help\"."])
-
-    if re.search(r'\b(summarize|summary|overview|insights|key findings|brief)\b', q):
-        all_ins = generate_overview_insights(f_df) + generate_demo_insights(f_df) + generate_edu_insights(f_df) + generate_diversity_insights(f_df)
-        summary = "📊 **Here is the summary of the current filtered data:**\n\n"
-        for ins in all_ins: summary += f"• {ins.replace('<b>', '**').replace('</b>', '**')}\n\n"
-        return summary
-
-    if re.search(r'\b(list|all|every|show me|give me|names of)\b.*\b(district|province|division|region)s?\b', q):
-        for col in ['District', 'Province', 'Division', 'Gallup Region']:
-            if col.lower().split()[0] in q or (col == 'District' and 'district' in q) or (col == 'Province' and 'province' in q):
-                return get_formatted_list(f_df, col)
-        return get_formatted_list(f_df, 'District')
-
-    if re.search(r'\b(trends?|growth|regional comparison|compare regions|over time)\b', q) and not find_entity_matches(q, f_df):
-        return get_regional_comparison(f_df)
-
-    if re.search(r'\b(most|top|highest)\b.*\bpopul', q):
-        s = f_df.groupby('District')['Total Population 2023'].sum()
-        return f"👥 The most populous district is **{s.idxmax()}** with **{s.max():,.0f}** people."
-    if re.search(r'\b(least|lowest|smallest)\b.*\bpopul', q):
-        s = f_df.groupby('District')['Total Population 2023'].sum()
-        return f"👥 The least populous district is **{s.idxmin()}** with **{s.min():,.0f}** people."
-    if re.search(r'\b(most|top|highest)\b.*\bliterac', q):
-        s = f_df.groupby('District').apply(lambda x: rate_from_sums(x, 'Sum of Literacy Rate', '10 + Population')).dropna()
-        return f"📚 **{s.idxmax()}** has the highest literacy rate at **{s.max():.1f}%**."
-    if re.search(r'\b(least|lowest)\b.*\bliterac', q):
-        s = f_df.groupby('District').apply(lambda x: rate_from_sums(x, 'Sum of Literacy Rate', '10 + Population')).dropna()
-        return f"📚 **{s.idxmin()}** has the lowest literacy rate at **{s.min():.1f}%**."
-    if re.search(r'\b(most|top|highest)\b.*\b(school|attendance)', q):
-        s = f_df.groupby('District').apply(lambda x: rate_from_sums(x, 'School Attendance', 'School Attendance.5 - 14  Population')).dropna()
-        return f"🎓 **{s.idxmax()}** has the highest school attendance rate at **{s.max():.1f}%**."
-    if re.search(r'\b(most|top|highest)\b.*\bhousehold', q):
-        s = f_df.groupby('District')['Households'].sum()
-        return f"🏠 **{s.idxmax()}** has the most households (**{s.max():,.0f}**)."
-
-    if re.search(r'\b(how many|total|count)\b.*\bdistrict', q): return f"📊 There are **{f_df['District'].nunique()}** unique districts in the current filtered view."
-    if re.search(r'\b(how many|total|count)\b.*\bprovince', q): return f"📊 There are **{f_df['Province'].nunique()}** unique provinces in the current filtered view."
-    if re.search(r'\b(how many|total|count)\b.*\bpopul', q): return f"👥 Total population in the current selection is **{f_df['Total Population 2023'].sum():,.0f}**."
-    if re.search(r'\b(how many|total|count)\b.*\bhousehold', q): return f"🏠 Total households in the current selection: **{f_df['Households'].sum():,.0f}**."
-
-    if re.search(r'\b(average|avg|mean)\b.*\bhousehold size\b', q):
-        v = weighted_avg(f_df, 'Average of avg_hh_size', 'Households')
-        return f"📐 The average household size is **{v:.1f}** people."
-    if re.search(r'\b(average|avg|mean)\b.*\bliterac', q):
-        v = rate_from_sums(f_df, 'Sum of Literacy Rate', '10 + Population')
-        return f"📐 The average literacy rate is **{v:.1f}%**."
-    if re.search(r'\b(average|avg|mean)\b.*\bsex ratio\b', q):
-        v = weighted_avg(f_df, 'Average of sex_ratio', 'Total Population 2023')
-        return f"📐 The average sex ratio is **{v:.1f}** males per 100 females."
-
-    matches = find_entity_matches(q, f_df)
-    if len(matches) < 2:
-        fm = fuzzy_entity_match(q, f_df)
-        if fm and fm not in matches:
-            matches.append(fm)
-    if len(matches) >= 2:
-        same_col = [m for m in matches if m[0] == matches[0][0]]
-        if len(same_col) >= 2 and re.search(r'\b(vs|versus|compare|comparison|between)\b', q):
-            return get_comparison(f_df, same_col[0][0], same_col[0][1], same_col[1][1], q)
-    if matches:
-        col, val = matches[0]
-        return get_entity_profile(f_df, col, val)
-
-    for col in ['Region Type']:
-        if col in f_df.columns and re.search(rf'\b{re.escape(col.lower())}\b', q):
-            return get_formatted_list(f_df, col)
-
-    return ("🤔 I didn't fully catch that. I'm great at looking up a **district/province/division by name**, finding **top/highest/lowest** metrics, "
-            "**counts**, **averages**, **comparisons**, or a full **summary**. Type **\"help\"** to see everything I can do!")
-
-
-def process_chat_input(prompt_text):
-    st.session_state.chat_history.append({"role": "user", "text": prompt_text})
-    st.session_state.awaiting_response = True
-    st.session_state.pending_prompt = prompt_text
-    st.rerun()
-
-# ==========================================
-# TAB 10: CHATBOT UI
-# ==========================================
-with tab10:
-    head_col, btn_col = st.columns([6, 1])
-    with head_col:
-        st.markdown("""
-            <div class="chatbot-card">
-                <div class="chatbot-avatar">🤖</div>
-                <div>
-                    <div class="chatbot-title">Data Bot</div>
-                    <div class="chatbot-status"><span class="status-dot"></span> Online · Reading current sidebar filters</div>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-    with btn_col:
-        st.write("")
-        st.write("")
-        if st.button("🗑️ Clear Chat", use_container_width=True, key="clear_chat_btn"):
-            st.session_state.chat_history = []
-            st.rerun()
-
-    st.markdown("""
-        <div class="capability-pills">
-            <span class="pill">📋 Lists</span>
-            <span class="pill">🏆 Top / Most</span>
-            <span class="pill">📈 Regional Comparison</span>
-            <span class="pill">📐 Averages</span>
-            <span class="pill">🔍 District / Province Lookup</span>
-            <span class="pill">⚖️ Compare</span>
-            <span class="pill">📊 Summary</span>
-        </div>
-    """, unsafe_allow_html=True)
-
-    chat_container = st.container(height=480, border=True)
-    with chat_container:
-        if not st.session_state.chat_history:
-            st.markdown("👋 **Hi! I'm your Data Bot.** Ask me about any district, province, or division by name, request comparisons or top metrics, or just say hello!")
-        for message in st.session_state.chat_history:
-            avatar = "🧑‍💻" if message["role"] == "user" else "🤖"
-            with st.chat_message(message["role"], avatar=avatar):
-                st.markdown(message["text"])
-
-        if st.session_state.awaiting_response:
-            with st.chat_message("assistant", avatar="🤖"):
-                placeholder = st.empty()
-                for phrase in ["🤔 *Thinking...*", "📊 *Analyzing the filtered data...*", "🔎 *Crunching the numbers...*"]:
-                    placeholder.markdown(phrase)
-                    time.sleep(0.45)
-
-                answer = answer_query(st.session_state.pending_prompt, filtered_df)
-
-                words = answer.split(" ")
-                chunk_size = 4
-                displayed = ""
-                for i in range(0, len(words), chunk_size):
-                    displayed += " ".join(words[i:i + chunk_size]) + " "
-                    placeholder.markdown(displayed + "▌")
-                    time.sleep(0.035)
-                placeholder.markdown(answer)
-
-            st.session_state.chat_history.append({"role": "assistant", "text": answer})
-            st.session_state.awaiting_response = False
-            st.session_state.pending_prompt = None
-
-    if not st.session_state.chat_history:
-        st.markdown("💡 **Try asking me:**")
-        r1c1, r1c2, r1c3 = st.columns(3)
-        if r1c1.button("Most populous district", key="ex1", use_container_width=True): process_chat_input("most populous district")
-        if r1c2.button("Tell me about Lahore", key="ex2", use_container_width=True): process_chat_input("tell me about Lahore")
-        if r1c3.button("Urban vs rural comparison", key="ex3", use_container_width=True): process_chat_input("regional comparison")
-        r2c1, r2c2, r2c3 = st.columns(3)
-        if r2c1.button("Give me a summary", key="ex4", use_container_width=True): process_chat_input("give me a summary")
-        if r2c2.button("Average household size", key="ex5", use_container_width=True): process_chat_input("average household size")
-        if r2c3.button("What can you do?", key="ex6", use_container_width=True): process_chat_input("what can you do")
-
-    if prompt := st.chat_input("Ask anything — a district/province name, \"hi\", \"thanks\", comparisons...", key="tab10_chat_input"):
-        process_chat_input(prompt)
