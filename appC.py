@@ -12,13 +12,10 @@ st.set_page_config(page_title="Welfare Index", page_icon="🇵🇰", layout="wid
 # --- Theme: this dashboard is locked to Dark Mode only ---
 CHART_FONT_COLOR = "#e2e8f0"
 CHART_GRID_COLOR = "rgba(255,255,255,0.08)"
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
 # --- Enhanced Dark-Mode Design System ---
 st.markdown("""
     <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 
