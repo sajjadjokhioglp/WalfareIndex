@@ -16,6 +16,9 @@ CHART_GRID_COLOR = "rgba(255,255,255,0.08)"
 # --- Enhanced Dark-Mode Design System ---
 st.markdown("""
     <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 
